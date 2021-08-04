@@ -1,5 +1,5 @@
 import * as React from "react";
-import WebApiClient from "xrm-webapi-client";
+import * as WebApiClient from "xrm-webapi-client";
 import { EntityDefinition } from "../domain/EntityDefinition";
 import { SdkStep } from "../domain/SdkStep";
 import { SdkFilter } from "../domain/SdkFilter";
@@ -22,16 +22,12 @@ interface SdkStepManagerState {
 }
 
 export class SdkStepManager extends React.PureComponent<SdkStepManagerProps, SdkStepManagerState> {
-    private WebApiClient: typeof WebApiClient;
-
     constructor(props: SdkStepManagerProps) {
         super(props);
 
         this.state = {
         };
 
-        // Webpack should import WebApiClient from global itself, but somehow it doesn't
-        this.WebApiClient = (window as any).WebApiClient;
         this.setEntity = this.setEntity.bind(this);
         this.setMessage = this.setMessage.bind(this);
         this.newStep = this.newStep.bind(this);
@@ -45,7 +41,7 @@ export class SdkStepManager extends React.PureComponent<SdkStepManagerProps, Sdk
             selectedEntity: eventKey
         });
 
-        this.WebApiClient.Retrieve({
+        WebApiClient.Retrieve({
             entityName: "sdkmessagefilter",
             queryParams: `?$filter=primaryobjecttypecode eq '${eventKey}'&$expand=sdkmessageid`})
         .then((result: any) => {
@@ -99,7 +95,7 @@ export class SdkStepManager extends React.PureComponent<SdkStepManagerProps, Sdk
             return this.props.stepCallBack(this.newStep(), this.state.selectedFilter.primaryobjecttypecode, this.state.selectedFilter.sdkmessageid.name);
         }
 
-        return this.WebApiClient.Retrieve({
+        return WebApiClient.Retrieve({
             entityName: "sdkmessagefilter",
             entityId: this.state.selectedSdkStep._sdkmessagefilterid_value,
             queryParams: `?$expand=sdkmessageid`})

@@ -1,10 +1,69 @@
-# XTL - Xrm Templating Language [![Build status](https://ci.appveyor.com/api/projects/status/skqv53ykh62587qp?svg=true)](https://ci.appveyor.com/project/DigitalFlow/xrm-templating-language) [![NuGet Badge](https://buildstats.info/nuget/Xrm.Oss.TemplatingLanguage.Sources)](https://www.nuget.org/packages/Xrm.Oss.TemplatingLanguage.Sources)
+# XTL - Xrm Templating Language
+[![Build status](https://ci.appveyor.com/api/projects/status/skqv53ykh62587qp?svg=true)](https://ci.appveyor.com/project/DigitalFlow/xrm-templating-language) [![NuGet Badge](https://buildstats.info/nuget/Xrm.Oss.TemplatingLanguage.Sources)](https://www.nuget.org/packages/Xrm.Oss.TemplatingLanguage.Sources)
 
 |Line Coverage|Branch Coverage|
 |-----|-----------------|
 |[![Line coverage](https://cdn.rawgit.com/digitalflow/xrm-templating-language/master/reports/badge_linecoverage.svg)](https://cdn.rawgit.com/digitalflow/xrm-templating-language/master/reports/index.htm)|[![Branch coverage](https://cdn.rawgit.com/digitalflow/xrm-templating-language/master/reports/badge_branchcoverage.svg)](https://cdn.rawgit.com/digitalflow/xrm-templating-language/master/reports/index.htm)|
 
 A domain specific language for Dynamics CRM allowing for easy text template processing
+
+- [XTL - Xrm Templating Language](#xtl---xrm-templating-language)
+  - [Purpose](#purpose)
+  - [Where to get it](#where-to-get-it)
+  - [Requirements](#requirements)
+  - [Examples](#examples)
+  - [How To Register](#how-to-register)
+    - [Using XTL Editor](#using-xtl-editor)
+    - [Manual Way](#manual-way)
+  - [Benefits](#benefits)
+  - [General Information](#general-information)
+  - [Types](#types)
+  - [Functions](#functions)
+    - [If](#if)
+    - [Or](#or)
+    - [And](#and)
+    - [Not](#not)
+    - [IsNull](#isnull)
+    - [IsEqual](#isequal)
+    - [IsLess](#isless)
+    - [IsLessEqual](#islessequal)
+    - [IsGreater](#isgreater)
+    - [IsGreaterEqual](#isgreaterequal)
+    - [Value](#value)
+    - [RecordUrl](#recordurl)
+    - [Fetch](#fetch)
+    - [First](#first)
+    - [Last](#last)
+    - [Union](#union)
+    - [Map](#map)
+    - [Sort](#sort)
+    - [RecordTable](#recordtable)
+    - [PrimaryRecord](#primaryrecord)
+    - [RecordId](#recordid)
+    - [RecordLogicalName](#recordlogicalname)
+    - [Concat](#concat)
+    - [IndexOf](#indexof)
+    - [Substring](#substring)
+    - [Replace](#replace)
+    - [Array](#array)
+    - [Join](#join)
+    - [NewLine](#newline)
+    - [DateTimeNow](#datetimenow)
+    - [DateTimeUtcNow](#datetimeutcnow)
+    - [DateToString](#datetostring)
+    - [ConvertDateTime](#convertdatetime)
+    - [Format](#format)
+    - [RetrieveAudit](#retrieveaudit)
+    - [Snippet](#snippet)
+      - [Example - Refer to Snippet using unique name](#example---refer-to-snippet-using-unique-name)
+      - [Example - Refer to snippet with dynamic name](#example---refer-to-snippet-with-dynamic-name)
+      - [Example - Refer to snippet with simple filter](#example---refer-to-snippet-with-simple-filter)
+      - [Example - Refer to snippet with dynamic filter](#example---refer-to-snippet-with-dynamic-filter)
+  - [Sample](#sample)
+  - [Templating on not yet existing records](#templating-on-not-yet-existing-records)
+  - [Template Editor](#template-editor)
+  - [License](#license)
+  - [Credits](#credits)
 
 ## Purpose
 XTL is a domain specific language created for easing text processing inside Dynamics CRM.
@@ -24,7 +83,10 @@ Build it yourself by running `build.cmd`, or simply download from [AppVeyor](htt
 XTL itself does not use any specific CRM features and is compatible with Dynamics CRM 2011 and higher.
 Currently the Plugin is built against Dynamics 365 SDK however. Future releases may target specific CRM versions.
 The template editor is only available in CRM 2016 and later, as it uses the Web Api.
-The solution which can be downloaded from the releases supports CRM >= v8.0 starting from XTL v3.0.3 upwards.
+
+The solutions which can be downloaded from the releases support the following CRM versions:
+- XTL v3.0.3 to 3.8.1: CRM v8 and later
+- XTL v3.8.2 upwards: CRM v9 (since we use the rich text pcf control for snippet expressions if "Is HTML" is true)
 
 ## Examples
 Examples of how to use XTL can be found in our [Wiki](https://github.com/DigitalFlow/Xrm-Templating-Language/wiki).
@@ -80,13 +142,14 @@ Using XTL provides the following benefits:
 
 ## Types
 Native Types:
-- String Constants (Alpha numeric text inside quotes)
+- String Constants (Alpha numeric text inside double quotes or single quotes)
 - Integers (Digit expression)
 - Doubles (Digits are separated by '.', a 'd' is appended to separate from decimals. E.g: 1.4d)
 - Decimals (Digits are separated by '.', a 'm' is appended to separate from doubles. E.g: 1.4m)
 - Booleans (true or false)
 - Functions (Identifiers without quotes followed by parenthesis with parameters)
 - Dictionaries (JS style objects, such as { propertyName: value }. Value can be a constant or another expression.
+- Arrow functions (As function handlers for usage in some places. JS Style arrow functions such as (name) => Substring(name, 0, 1) for getting the first char of the value. Parameter names can be chosen by yourself, but they may not be named after an existing XTL function or a reserved word such as true, false, null) *Available starting with v3.8.0*
 
 In addition, null is also a reserved keyword.
 
@@ -205,6 +268,25 @@ Example:
 RecordUrl ( Value ( "regardingobjectid") )
 ```
 
+### OrganizationUrl
+**Available since: v3.6.2**
+
+Returns the URL of your organization with an additional suffix and link text.
+When passing the configuration property "asHtml" as "false", it will only print the URL, otherwise it will be an HTML <a> tag.
+
+__Important Remark: When using it, the organization url is automatically saved to the step secure config. When importing the step into another organization, you will initially have to open the editor in the new organnization, select each new step and save it once, so that the secure configs will be created. This is only necessary once, on the first import of a new step to an organization.__
+
+
+Example:
+``` JavaScript
+OrganizationUrl ( { urlSuffix: "/WebResources/oss_/somepage.html", asHtml: true, linkText: "Click me" } )
+
+OrganizationUrl ( { urlSuffix: "/WebResources/oss_/somepage.html" } )
+```
+
+If the organization URL was xosstest.crm4.dynamics.com, the output for the first example would be `<a href="https://xosstest.crm4.dynamics.com/WebResources/oss_/somepage.html">Click me</a>`.
+For the second example the output would simply be `https://xosstest.crm4.dynamics.com/WebResources/oss_/somepage.html`.
+
 ### Fetch
 Returns a list of records, which were retrieved using supplied query.
 First parameter is the fetch xml. You can optionally pass a list of further parameters, such as entity references, entities or option set values as references.
@@ -255,6 +337,55 @@ Example:
 Last ( Fetch ( "<fetch no-lock='true'><entity name='task'><attribute name='description' /><attribute name='subject' /><filter><condition attribute='regardingobjectid' operator='eq' value='{1}' /></filter></entity></fetch>", Value ( "regardingobjectid" ) ) )
 ```
 
+### Union
+Merge multiple arrays into one.
+
+Example:
+``` JavaScript
+Union ( ["This", "will"], ["Be"], ["One", "Array"] )
+```
+
+will result in one array `["This", "will", "Be", "One", "Array"]`.
+
+### Map
+**Available since: v3.8.0**
+Maps values inside an array to a new array while mutating every value with the provided function.
+
+Example:
+``` JavaScript
+Join(" ", Map(["Lord", "of", "the", "Rings"], (s) => Substring(s, 0, 1)))
+```
+
+will result in `"L o t R"`.
+
+Your input does not need to be an array of strings, you can even loop over records fetched using Fetch:
+
+``` JavaScript
+Join(", ", Map(Fetch("<fetch no-lock='true'><entity name='contact'><attribute name='ownerid' /><attribute name='createdon' /></entity></fetch>"), (record) => DateToString(ConvertDateTime(Value("createdon", { explicitTarget: record }), { userId: Value("ownerid", { explicitTarget: record }) }), { format: "yyyy-MM-dd hh:mm" })))
+```
+
+will result in something like this: `"2018-10-27 05:39, 2019-04-24 10:24"`
+
+### Sort
+Sort array, either native values or by property. Ascending by default, descending by setting the config flag
+
+Example:
+``` JavaScript
+Sort ( ["This", "will", "Be", "Sorted"] )
+```
+
+Example descending:
+``` JavaScript
+Sort ( ["This", "will", "Be", "Sorted"], { descending: true } )
+```
+
+Example with property:
+``` JavaScript
+Sort ( Fetch ( "<fetch no-lock='true'><entity name='task'><attribute name='createdon' /><attribute name='subject' /></entity></fetch>"), { property: "createdon" })
+```
+
+will result in one array `["This", "will", "Be", "One", "Array"]`.
+
 ### RecordTable
 Returns a table of records with specified columns and record url if wanted.
 First parameter is a list of records, for displaying inside the table. Consider retrieving them using the Fetch function.
@@ -274,7 +405,10 @@ It will then print the task subject and description, including an url, into the 
 In release v3.0.2 you will also be able to configure each column's style separately.
 This will allow for defining a custom width to each column.
 You can set it by passing the columns not as array of strings, but as array of objects.
-They may containt the keys `name` for the column name, which you previously passed directly as string, `label` as custom label to show in the header, `style` for your style information for this column and `mergeStyle` for defining, whether your style information should be appended to the line (or header) style or not (defaults to true).
+They may contain the keys `name` for the column name, which you previously passed directly as string, `label` as custom label to show in the header, `style` for your style information for this column and `mergeStyle` for defining, whether your style information should be appended to the line (or header) style or not (defaults to true).
+You can also use `nameByEntity` when displaying mixed records in the table and pass a dictionary with logical name as keys and column name per entity as value such as:
+`{ nameByEntity: { contact: "firstname", task: "subject" }, label: "Column Label" }`.
+You might want to override the column label as above to use one that matches all types.
 
 Passing all column names as array of strings is still possible.
  
@@ -288,6 +422,18 @@ Example of objects as columns:
 RecordTable ( Fetch ( "<fetch no-lock='true'><entity name='task'><attribute name='description' /><attribute name='subject' /><filter><condition attribute='regardingobjectid' operator='eq' value='{1}' /></filter></entity></fetch>", Value ( "regardingobjectid" ) ), "task", [ { name: "subject", label: "Overridden Subject Label", style: "width:70%" }, {name: "description"} ], { addRecordUrl: true })
 ```
 
+Starting with v3.8.0, you can also pass your own render function for values. This can be used for mutating values before inserting them into the table.
+Example:
+
+```JavaScript
+RecordTable(Fetch("<fetch no-lock='true'><entity name='contact'><attribute name='ownerid' /><attribute name='createdon' /></entity></fetch>"), "contact", [{ name: "createdon", label: "Date", renderFunction: (record, column) => DateToString(ConvertDateTime(Value(column, { explicitTarget: record }), { userId: Value("ownerid", { explicitTarget: record }) }), { format: "yyyy-MM-dd hh:mm" }) }])
+```
+
+Above example fetches all contacts with their owner and createdon date.
+Before rendering them into a HTML table, each date is converted to the time zone of its owner.
+When accessing values from the row record, you need to pass the record parameter of the renderFunction as explicitTarget to the Value function.
+By leaving the explicitTarget out, you can still access values from the current primary record (for example the email record where you are going to insert this RecordTable).
+
 ### PrimaryRecord
 Returns the current primary entity as Entity object.
 No parameters are needed.
@@ -296,6 +442,34 @@ Example:
 ``` JavaScript
 PrimaryRecord ()
 ```
+
+### RecordId
+**Available since: v3.9.0**
+
+Returns the GUID of an Entity or Entity Reference object.
+
+Example:
+``` JavaScript
+RecordId( PrimaryRecord () )
+
+RecordId( Value("primarycontactid") )
+```
+
+Returns the GUID of the primary record, or in the second example the GUID of the primarycontactid lookup.
+
+### RecordLogicalName
+**Available since: v3.9.0**
+
+Returns the logical name of an Entity or Entity Reference object.
+
+Example:
+``` JavaScript
+RecordLogicalName ( PrimaryRecord () )
+
+RecordLogicalName ( Value("primarycontactid") )
+```
+
+Returns the GUID of the primary record, or in the second example the GUID of the primarycontactid lookup.
 
 ### Concat
 Concatenates all parameters that were passed into one string.
@@ -306,11 +480,21 @@ Concat(Value("lastname"), ", ", Value("firstname"))
 ```
 Above example could return something like 'Baggins, Frodo'.
 
+### IndexOf
+**Available since: v3.6.2**
+Takes a string input where a substring should be searched and the substring to search for as parameters. Returns the index where the substring was found inside the search text, or -1 if not found.
+
+Example:
+``` JavaScript
+IndexOf ( Value("fullname"), "Baggins")
+```
+Above example returns '6' when input is 'Frodo Beaggins'.
+
 ### Substring
 Takes the substring of your input starting from a given index. Length of substring can be passed optionally as well.
 
 Example:
-```
+``` JavaScript
 Substring(Value("firstname"), 1, 2 )
 ```
 Above example returns 'ro' when input is 'Frodo'.
@@ -383,7 +567,7 @@ Refer to the .NET style for date formatting.
 ### ConvertDateTime
 Converts a UTC DateTime (which is what you'll usually get from CRM) to a timezoned DateTime.
 You can either pass a user reference as userId config property, or a fixed timezone as timeZoneId config property.
-The timeZoneId fixed property is one of the default .NET timezone IDs.
+The timeZoneId fixed property is one of the default .NET timezone IDs (a list can be found [here](https://lonewolfonline.net/timezone-information/) for example).
 An optional format config property can directly be set for defining the format of the timezoned DateTime.
 
 Example by userId:
@@ -412,6 +596,85 @@ Format( Value("index"),  { format: "{0:00000}" } ) // Will print 00001 for index
 
 Refer to the .NET style for date formatting.
 
+### RetrieveAudit
+**Available since: v3.8.1**
+
+Can be used for retrieving the previous value for a given field of a record. Auditing has to be enabled for the specific entity for this to work.
+Receives the record as Entity (PrimaryRecord function) or EntityReference as first parameter, field name as second.
+
+Example Entity:
+``` JavaScript
+RetrieveAudit(PrimaryRecord(), "statuscode")
+```
+
+Example EntityReference:
+``` JavaScript
+RetrieveAudit(Value("regardingobjectid"), "statuscode")
+```
+
+### Snippet
+**Available since: v3.7.0**
+> In XTL >= v3.8.2, you can set "Contains Plain text" and "Is HTML" to true, for getting a rich text editor for expressions. This allows for advanced formatting in snippets and for uploading images as well.
+
+Snippets are an easy way for storing texts globally, so that they can be referred to from anywhere in the system.
+They are stored in the XTL Snippet entity. You can use them as simple storage for a single (long) XTL expression, or even pass a complete text with embedded XTL expressions in the usual fashion (${{expression}}) inside it.
+When only saving a XTL expression, be sure to set "Contains Plain text" to "No", so that XTL will automatically wrap your expression in ${{ ... }} brackets.
+When saving a complete text with embedded XTL expressions, set "Contains Plain Text" to "Yes", so that XTL will do no automatic wrapping.
+
+You can use the unique name inside the XTL snippet record for referring to it, or you can use the normal name and refer to it using its name and a custom fetchXml filter.
+The second parameter is especially useful, as you can create custom fields on the snippet entity, for example a language field, and use the filter for fetching the correct language dynamically.
+
+For the following examples, lets define some XTL snippets that we can imagine to be existent in our organization:
+
+Snippet 1 (used for fetching the owner's name on any entity)
+- oss_uniquename: "OwnerName"
+- oss_containsplaintext: false
+- oss_xtlexpression: Value("ownerid.name")
+> Remember: We must not wrap the expression in the usual ${{...}} brackets in this case, this will be done automatically, when "Contains Plain Text" is false
+
+Snippet 2 (used for generating a contact's salutation)
+- oss_uniquename: "Salutation_EN"
+- oss_containsplaintext: true
+- oss_xtlexpression: Dear ${{If(IsEqual(Value("gendercode"), 1), "Mr.", "Ms.")}} ${{Value("lastname")}}
+
+Snippet 3 (used for generating a contact's salutation)
+- oss_name: "salutation"
+- oss_containsplaintext: true
+- new_customlanguage: "EN"
+- oss_xtlexpression: Dear ${{If(IsEqual(Value("gendercode"), 1), "Mr.", "Ms.")}} ${{Value("lastname")}}
+
+#### Example - Refer to Snippet using unique name
+Refers to Snippet 1, which will be matched by the following expression:
+
+```JS
+Snippet("OwnerName")
+```
+
+#### Example - Refer to snippet with dynamic name
+Refers to Snippet 2, which will be matched by the following expression:
+
+``` JavaScript
+Snippet(Concat("Salutation_", Value("new_languageisocode"))
+```
+
+When running this on a contact with "new_languageisocode" equal to "EN", this will resolve to snippet name "Salutation_EN" and snippet 2 will thus be found.
+
+#### Example - Refer to snippet with simple filter
+Refers to Snippet 3, which will be matched by the following expression:
+
+``` JavaScript
+Snippet("salutation", { filter: '<filter><condition attribute="new_customlanguage" operator="eq" value="EN" /></filter>' })
+```
+
+#### Example - Refer to snippet with dynamic filter
+Refers to Snippet 3, which will be matched by the following expression:
+
+``` JavaScript
+Snippet("salutation", { filter: '<filter><condition attribute="new_customlanguage" operator="eq" value="${{Value("new_languageisocode")}}" /></filter>' })
+```
+
+Before using the custom filter, all XTL tokens will be processed, so for a contact with "new_languageisocode" equal to "EN", the expression inside the filter value would be exchanged for "EN" and the correct snippet found and applied.
+
 ## Sample
 Consider the following e-mail template content:
 ```
@@ -427,6 +690,89 @@ Hello Frodo,
 
 a new case was associated with your account TheShire Limited, you can open it using the following URL:
 https://imagine-creative-url.local
+```
+
+## Templating on not yet existing records
+Sometimes you might want to preset values on records that are not yet created. For this you can call the `oss_XTLApplyTemplate` custom action and provide the current values of your current entity directly as JSON.
+
+For example if you want to process a template on the email entity and your templates need data only from the regardingobject of your entity:
+
+```JS
+const payload = {
+            jsonInput: JSON.stringify({
+                targetEntity: {
+                    Attributes: [
+                        {
+                            "key": "regardingobjectid",
+                            "value": {
+                                "__type": "EntityReference:http://schemas.microsoft.com/xrm/2011/Contracts",
+                                "Id": regardingObjectRef[0].id,
+                                "KeyAttributes": [],
+                                "LogicalName": regardingObjectRef[0].entityType,
+                                "Name": null,
+                                "RowVersion": null
+                            }
+                        }
+                    ]
+                },
+                template: snippet
+            })
+        };
+```
+
+You can then send this payload when executing the custom action.
+
+A json representation of an entity that can be deserialized in Dynamics looks something like this:
+
+```JSON
+{
+    "Attributes": [
+        {
+            "key": "createdon",
+            "value": "/Date(1615542774000)/"
+        },
+        {
+            "key": "customersatisfactioncode",
+            "value": {
+                "__type": "OptionSetValue:http://schemas.microsoft.com/xrm/2011/Contracts",
+                "Value": 3
+            }
+        },
+        {
+            "key": "oss_someflag",
+            "value": false
+        },
+        {
+            "key": "ticketnumber",
+            "value": "123"
+        },
+        {
+            "key": "ownerid",
+            "value": {
+                "__type": "EntityReference:http://schemas.microsoft.com/xrm/2011/Contracts",
+                "Id": "deadbeef-dead-dead-dead-deadbeefdead",
+                "KeyAttributes": [],
+                "LogicalName": "systemuser",
+                "Name": null,
+                "RowVersion": null
+            }
+        },
+        {
+            "key": "processid",
+            "value": "00000000-0000-0000-0000-000000000000"
+        },
+        {
+            "key": "incidentid",
+            "value": "b4d7965c-b7d8-4c6b-a498-905eeedf6bf1"
+        },
+    ],
+    "EntityState": null,
+    "Id": "deadbeef-dead-dead-dead-deadbeefdead",
+    "KeyAttributes": [],
+    "LogicalName": "incident",
+    "RelatedEntities": [],
+    "RowVersion": null
+}
 ```
 
 ## Template Editor

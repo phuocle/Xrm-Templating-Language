@@ -16,6 +16,7 @@ using static Xrm.Oss.XTL.Interpreter.XTLInterpreter;
 
 namespace Xrm.Oss.XTL.Interpreter
 {
+    #pragma warning disable S1104 // Fields should not have public accessibility
     public static class FunctionHandlers
     {
         private static ConfigHandler GetConfig(List<ValueExpression> parameters)
@@ -38,7 +39,7 @@ namespace Xrm.Oss.XTL.Interpreter
                 throw new InvalidPluginExecutionException("First expects a list as only parameter!");
             }
 
-            var firstParam = CheckedCast<List<object>>(parameters.FirstOrDefault().Value, string.Empty, false);
+            var firstParam = CheckedCast<List<ValueExpression>>(parameters.FirstOrDefault().Value, string.Empty, false)?.Select(v => v?.Value).ToList();
             var entityCollection = CheckedCast<EntityCollection>(parameters.FirstOrDefault().Value, string.Empty, false)?.Entities.ToList();
 
             if (firstParam == null && entityCollection == null)
@@ -56,7 +57,7 @@ namespace Xrm.Oss.XTL.Interpreter
                 throw new InvalidPluginExecutionException("Last expects a list as only parameter!");
             }
 
-            var firstParam = CheckedCast<List<object>>(parameters.FirstOrDefault().Value, string.Empty, false);
+            var firstParam = CheckedCast<List<ValueExpression>>(parameters.FirstOrDefault().Value, string.Empty, false)?.Select(v => v?.Value).ToList();
             var entityCollection = CheckedCast<EntityCollection>(parameters.FirstOrDefault().Value, string.Empty, false)?.Entities.ToList();
 
             if (firstParam == null && entityCollection == null)
@@ -118,6 +119,7 @@ namespace Xrm.Oss.XTL.Interpreter
 
             var expected = parameters[0];
             var actual = parameters[1];
+            var tempGuid = Guid.Empty;
 
             var falseReturn = new ValueExpression(bool.FalseString, false);
             var trueReturn = new ValueExpression(bool.TrueString, true);
@@ -146,6 +148,38 @@ namespace Xrm.Oss.XTL.Interpreter
                 var optionSetResult = values[0].Equals(values[1]);
                 return new ValueExpression(optionSetResult.ToString(CultureInfo.InvariantCulture), optionSetResult);
             }
+            else if (new[] { expected.Value, actual.Value }.All(v => v is Guid || (v is string && Guid.TryParse((string) v, out tempGuid)) || v is EntityReference || v is Entity))
+            {
+                var values = new[] { expected.Value, actual.Value }
+                    .Select(v =>
+                    {
+                        if (v is Guid)
+                        {
+                            return (Guid) v;
+                        }
+
+                        if (v is string)
+                        {
+                            return tempGuid;
+                        }
+
+                        if (v is EntityReference)
+                        {
+                            return ((EntityReference) v).Id;
+                        }
+
+                        if (v is Entity)
+                        {
+                            return ((Entity) v).Id;
+                        }
+
+                        return Guid.Empty;
+                    })
+                    .ToList();
+
+                var guidResult = values[0].Equals(values[1]);
+                return new ValueExpression(guidResult.ToString(CultureInfo.InvariantCulture), guidResult);
+            }
             else
             {
                 var result = expected.Value.Equals(actual.Value);
@@ -156,7 +190,7 @@ namespace Xrm.Oss.XTL.Interpreter
 
         public static FunctionHandler And = (primary, service, tracing, organizationConfig, parameters) =>
         {
-            if (parameters.Count != 2)
+            if (parameters.Count < 2)
             {
                 throw new InvalidPluginExecutionException("And expects at least 2 conditions!");
             }
@@ -176,7 +210,7 @@ namespace Xrm.Oss.XTL.Interpreter
 
         public static FunctionHandler Or = (primary, service, tracing, organizationConfig, parameters) =>
         {
-            if (parameters.Count != 2)
+            if (parameters.Count < 2)
             {
                 throw new InvalidPluginExecutionException("Or expects at least 2 conditions!");
             }
@@ -284,6 +318,122 @@ namespace Xrm.Oss.XTL.Interpreter
             return new ValueExpression(urls, urls);
         };
 
+        public static FunctionHandler GetOrganizationUrl = (primary, service, tracing, organizationConfig, parameters) =>
+        {
+            if (organizationConfig == null || string.IsNullOrEmpty(organizationConfig.OrganizationUrl))
+            {
+                throw new InvalidPluginExecutionException("GetOrganizationUrl can't find the Organization Url inside the plugin step secure configuration. Please add it.");
+            }
+
+            var config = GetConfig(parameters);
+            var linkText = config.GetValue<string>("linkText", "linkText must be a string", string.Empty);
+            var urlSuffix = config.GetValue<string>("urlSuffix", "urlSuffix must be a string", string.Empty);
+            var asHtml = config.GetValue<bool>("asHtml", "asHtml must be a boolean");
+
+            if (asHtml)
+            {
+                var url = $"{organizationConfig.OrganizationUrl}{urlSuffix}";
+                var href = $"<a href=\"{url}\">{(string.IsNullOrEmpty(linkText) ? url : linkText)}</a>";
+                return new ValueExpression(href, href);
+            }
+            else
+            {
+                return new ValueExpression(organizationConfig.OrganizationUrl, organizationConfig.OrganizationUrl);
+            }
+        };
+
+        public static FunctionHandler Union = (primary, service, tracing, organizationConfig, parameters) =>
+        {
+            if (parameters.Count < 2)
+            {
+                throw new InvalidPluginExecutionException("Union function needs at least two parameters: Arrays to union");
+            }
+
+            var union = parameters.Select(p =>
+            {
+                if (p == null)
+                {
+                    return null;
+                }
+
+                return p.Value as List<ValueExpression>;
+            })
+            .Where(p => p != null)
+            .SelectMany(p => p)
+            .ToList();
+
+            return new ValueExpression(null, union);
+        };
+
+        public static FunctionHandler Map = (primary, service, tracing, organizationConfig, parameters) =>
+        {
+            if (parameters.Count < 2)
+            {
+                throw new InvalidPluginExecutionException("Map function needs at least an array with data and a function for mutating the data");
+            }
+
+            var config = GetConfig(parameters);
+
+            var values = parameters[0].Value as List<ValueExpression>;
+
+            if (!(values is IEnumerable))
+            {
+                throw new InvalidPluginExecutionException("Map needs an array as first parameter.");
+            }
+
+            var lambda = parameters[1].Value as Func<List<ValueExpression>, ValueExpression>;
+
+            if (lambda == null)
+            {
+                throw new InvalidPluginExecutionException("Lambda function must be a proper arrow function");
+            }
+
+            return new ValueExpression(null, values.Select(v => lambda(new List<ValueExpression> { v })).ToList());
+        };
+
+        public static FunctionHandler Sort = (primary, service, tracing, organizationConfig, parameters) =>
+        {
+            if (parameters.Count < 1)
+            {
+                throw new InvalidPluginExecutionException("Sort function needs at least an array to sort and optionally a property for sorting");
+            }
+
+            var config = GetConfig(parameters);
+
+            var values = parameters[0].Value as List<ValueExpression>;
+
+            if (!(values is IEnumerable))
+            {
+                throw new InvalidPluginExecutionException("Sort needs an array as first parameter.");
+            }
+
+            var descending = config.GetValue<bool>("descending", "descending must be a bool");
+            var property = config.GetValue<string>("property", "property must be a string");
+
+            if (string.IsNullOrEmpty(property))
+            {
+                if (descending)
+                {
+                    return new ValueExpression(null, values.OrderByDescending(v => v.Value).ToList());
+                }
+                else
+                {
+                    return new ValueExpression(null, values.OrderBy(v => v.Value).ToList());
+                }
+            }
+            else
+            {
+                if (descending)
+                {
+                    return new ValueExpression(null, values.OrderByDescending(v => (v.Value as Entity)?.GetAttributeValue<object>(property)).ToList());
+                }
+                else
+                {
+                    return new ValueExpression(null, values.OrderBy(v => (v.Value as Entity)?.GetAttributeValue<object>(property)).ToList());
+                }
+            }
+        };
+
         private static Func<string, IOrganizationService, Dictionary<string, string>> RetrieveColumnNames = (entityName, service) =>
         {
             return ((RetrieveEntityResponse)service.Execute(new RetrieveEntityRequest
@@ -306,7 +456,8 @@ namespace Xrm.Oss.XTL.Interpreter
                 throw new InvalidPluginExecutionException("RecordTable needs at least 3 parameters: Entities, entity name, add url boolean, display columns as separate string constants");
             }
 
-            var records = CheckedCast<List<object>>(parameters[0].Value, "RecordTable requires the first parameter to be a list of entities")
+            var records = CheckedCast<List<ValueExpression>>(parameters[0].Value, "RecordTable requires the first parameter to be a list of entities")
+                .Select(p => (p as ValueExpression)?.Value)
                 .Cast<Entity>()
                 .ToList();
 
@@ -353,7 +504,7 @@ namespace Xrm.Oss.XTL.Interpreter
             foreach (var column in displayColumns)
             {
                 var name = string.Empty;
-                var columnName = column["name"] as string;
+                var columnName = column.ContainsKey("name") ? column["name"] as string : string.Empty;
 
                 if (columnName.Contains(":"))
                 {
@@ -391,7 +542,7 @@ namespace Xrm.Oss.XTL.Interpreter
             {
                 stringBuilder.AppendLine($"<th style=\"{tableHeadStyle}\">URL</th>");
             }
-            stringBuilder.AppendLine("<tr />");
+            stringBuilder.AppendLine("</tr>");
 
             if (records != null)
             {
@@ -405,23 +556,51 @@ namespace Xrm.Oss.XTL.Interpreter
 
                     foreach (var column in displayColumns)
                     {
-                        var columnName = column["name"] as string;
+                        var columnName = column.ContainsKey("name") ? column["name"] as string : string.Empty;
                         columnName = columnName.Contains(":") ? columnName.Substring(0, columnName.IndexOf(':')) : columnName;
+                        
+                        var renderFunction = column.ContainsKey("renderFunction") ? column["renderFunction"] as Func<List<ValueExpression>, ValueExpression> : null;
+                        var entityConfig = column.ContainsKey("nameByEntity") ? column["nameByEntity"] as Dictionary<string, object> : null;
+
+                        if (entityConfig != null && entityConfig.ContainsKey(record.LogicalName))
+                        {
+                            columnName = entityConfig[record.LogicalName] as string;
+                        }
+
+                        var staticValues = column.ContainsKey("staticValueByEntity") ? column["staticValueByEntity"] as Dictionary<string, object> : null;
+
+                        string value;
+
+                        if (staticValues != null && staticValues.ContainsKey(record.LogicalName))
+                        {
+                            value = staticValues[record.LogicalName] as string;
+                        }
+                        else if (renderFunction != null)
+                        {
+                            var rowRecord = new ValueExpression(null, record);
+                            var rowColumnName = new ValueExpression(columnName, columnName);
+
+                            value = renderFunction(new List<ValueExpression> { rowRecord, rowColumnName })?.Text;
+                        }
+                        else
+                        {
+                            value = PropertyStringifier.Stringify(columnName, record, service, config);
+                        }
 
                         if (column.ContainsKey("style"))
                         {
                             if (!column.ContainsKey("mergeStyle") || (bool)column["mergeStyle"])
                             {
-                                stringBuilder.AppendLine($"<td style=\"{lineStyle}{column["style"]}\">{PropertyStringifier.Stringify(columnName, record, service, config)}</td>");
+                                stringBuilder.AppendLine($"<td style=\"{lineStyle}{column["style"]}\">{value}</td>");
                             }
                             else
                             {
-                                stringBuilder.AppendLine($"<td style=\"{column["style"]}\">{PropertyStringifier.Stringify(columnName, record, service, config)}</td>");
+                                stringBuilder.AppendLine($"<td style=\"{column["style"]}\">{value}</td>");
                             }
                         }
                         else
                         {
-                            stringBuilder.AppendLine($"<td style=\"{lineStyle}\">{PropertyStringifier.Stringify(columnName, record, service, config)}</td>");
+                            stringBuilder.AppendLine($"<td style=\"{lineStyle}\">{value}</td>");
                         }
                     }
 
@@ -430,7 +609,7 @@ namespace Xrm.Oss.XTL.Interpreter
                         stringBuilder.AppendLine($"<td style=\"{lineStyle}\">{GetRecordUrl(primary, service, tracing, organizationConfig, new List<ValueExpression> { new ValueExpression(string.Empty, record), new ValueExpression(string.Empty, config.Dictionary) }).Value}</td>");
                     }
 
-                    stringBuilder.AppendLine("<tr />");
+                    stringBuilder.AppendLine("</tr>");
                 }
             }
 
@@ -514,17 +693,17 @@ namespace Xrm.Oss.XTL.Interpreter
 
                 if (referenceNumber >= references.Count)
                 {
-                    throw new InvalidPluginExecutionException($"You tried using reference {referenceNumber} in fetch, but there are less reference inputs than that. You should probably wrap this fetch inside an if condition and only execute it, if your reference is non-null.");
+                    throw new InvalidPluginExecutionException($"You tried using reference {referenceNumber} in fetch, but there are less reference inputs than that. Please check your reference number or your reference input array.");
                 }
 
-                return references[referenceNumber].ToString();
+                return references[referenceNumber]?.ToString();
             });
 
             tracing.Trace("References replaced");
             tracing.Trace($"Executing fetch: {query}");
             records.AddRange(service.RetrieveMultiple(new FetchExpression(query)).Entities);
 
-            return new ValueExpression(string.Empty, records);
+            return new ValueExpression(string.Empty, records.Select(r => new ValueExpression(string.Empty, r)).ToList());
         };
 
         public static FunctionHandler GetValue = (primary, service, tracing, organizationConfig, parameters) =>
@@ -596,7 +775,7 @@ namespace Xrm.Oss.XTL.Interpreter
             }
 
             var valuesToConcatenate = values
-                .Where(v => !removeEmptyEntries || !string.IsNullOrEmpty(v.Value as string))
+                .Where(v => !removeEmptyEntries || !string.IsNullOrEmpty(v.Text))
                 .Select(v => v.Text);
                 
             var joined = string.Join(separator, valuesToConcatenate);
@@ -666,6 +845,24 @@ namespace Xrm.Oss.XTL.Interpreter
 
             var subString = length > -1 ? text.Substring(startIndex, length) : text.Substring(startIndex);
             return new ValueExpression(subString, subString);
+        };
+
+        public static FunctionHandler IndexOf = (primary, service, tracing, organizationConfig, parameters) =>
+        {
+            if (parameters.Count < 2)
+            {
+                throw new InvalidPluginExecutionException("IndexOf needs a source string and a string to search for");
+            }
+
+            var value = CheckedCast<string>(parameters[0].Value, "Source must be a string");
+            var searchText = CheckedCast<string>(parameters[1].Value, "Search text must be a string");
+
+            var config = GetConfig(parameters);
+            var ignoreCase = config.GetValue<bool>("ignoreCase", "ignoreCase must be a boolean!");
+
+            var index = value.IndexOf(searchText, ignoreCase ? StringComparison.InvariantCultureIgnoreCase : StringComparison.InvariantCulture);
+
+            return new ValueExpression(index.ToString(), index);
         };
 
         public static FunctionHandler Replace = (primary, service, tracing, organizationConfig, parameters) =>
@@ -758,6 +955,98 @@ namespace Xrm.Oss.XTL.Interpreter
             }
         };
 
+        private static Entity FetchSnippetByUniqueName(string uniqueName, IOrganizationService service)
+        {
+            var fetch = $@"<fetch no-lock=""true"">
+                <entity name=""oss_xtlsnippet"">
+                    <attribute name=""oss_xtlexpression"" />
+                    <attribute name=""oss_containsplaintext"" />
+                    <filter operator=""and"">
+                        <condition attribute=""oss_uniquename"" operator=""eq"" value=""{uniqueName}"" />
+                    </filter>
+                </entity>
+            </fetch>";
+
+            var snippet = service.RetrieveMultiple(new FetchExpression(fetch))
+                .Entities
+                .FirstOrDefault();
+
+            return snippet;
+        }
+
+        private static Entity FetchSnippet(string name, string filter, Entity primary, OrganizationConfig organizationConfig, IOrganizationService service, ITracingService tracing)
+        {
+            var uniqueNameSnippet = FetchSnippetByUniqueName(name, service);
+
+            if (uniqueNameSnippet != null)
+            {
+                tracing.Trace("Found snippet by unique name");
+                return uniqueNameSnippet;
+            }
+
+            if (!string.IsNullOrEmpty(filter))
+            {
+                tracing.Trace("Processing tokens in custom snippet filter");
+            }
+
+            var fetch = $@"<fetch no-lock=""true"">
+                <entity name=""oss_xtlsnippet"">
+                    <attribute name=""oss_xtlexpression"" />
+                    <attribute name=""oss_containsplaintext"" />
+                    <filter operator=""and"">
+                        <condition attribute=""oss_name"" operator=""eq"" value=""{name}"" />
+                        { (!string.IsNullOrEmpty(filter) ? TokenMatcher.ProcessTokens(filter, primary, organizationConfig, service, tracing) : string.Empty) }
+                    </filter>
+                </entity>
+            </fetch>";
+            
+            if (!string.IsNullOrEmpty(filter))
+            {
+                tracing.Trace("Done processing tokens in custom snippet filter");
+            }
+
+            var snippet = service.RetrieveMultiple(new FetchExpression(fetch))
+                .Entities
+                .FirstOrDefault();
+
+            return snippet;
+        }
+
+        public static FunctionHandler Snippet = (primary, service, tracing, organizationConfig, parameters) =>
+        {
+            if (parameters.Count < 1)
+            {
+                throw new InvalidPluginExecutionException("Snippet needs at least a name as first parameter and optionally a config for defining further options");
+            }
+
+            var name = CheckedCast<string>(parameters[0].Value, "Name must be a string!");
+            var config = GetConfig(parameters);
+
+            var filter = config?.GetValue<string>("filter", "filter must be a string containing your fetchXml filter, which may contain XTL expressions on its own");
+
+            var snippet = FetchSnippet(name, filter, primary, organizationConfig, service, tracing);
+
+            if (snippet == null)
+            {
+                tracing.Trace("Failed to find a snippet matching the input");
+                return new ValueExpression(string.Empty, null);
+            }
+
+            var containsPlainText = snippet.GetAttributeValue<bool>("oss_containsplaintext");
+            var value = snippet.GetAttributeValue<string>("oss_xtlexpression");
+
+            // Wrap it in ${{ ... }} block
+            var processedValue = containsPlainText ? value : $"${{{{ {value} }}}}";
+
+            tracing.Trace("Processing snippet tokens");
+
+            var result = TokenMatcher.ProcessTokens(processedValue, primary, organizationConfig, service, tracing);
+
+            tracing.Trace("Done processing snippet tokens");
+
+            return new ValueExpression(result, result);
+        };
+
         public static FunctionHandler ConvertDateTime = (primary, service, tracing, organizationConfig, parameters) =>
         {
             if (parameters.Count < 2)
@@ -806,5 +1095,87 @@ namespace Xrm.Oss.XTL.Interpreter
 
             return new ValueExpression(text, localTime);
         };
+
+        public static FunctionHandler RetrieveAudit = (primary, service, tracing, organizationConfig, parameters) =>
+        {
+            var firstParam = parameters.FirstOrDefault()?.Value;
+            var reference = (firstParam as Entity)?.ToEntityReference() ?? firstParam as EntityReference;
+            var config = GetConfig(parameters);
+
+            if (firstParam != null && reference == null)
+            {
+                throw new InvalidPluginExecutionException("RetrieveAudit: First Parameter must be an Entity or EntityReference");
+            }
+
+            if (reference == null)
+            {
+                return new ValueExpression(string.Empty, null);
+            }
+
+            var field = CheckedCast<string>(parameters[1]?.Value, "RetrieveAudit: fieldName must be a string");
+
+            var request = new RetrieveRecordChangeHistoryRequest
+            {
+                Target = reference
+            };
+            var audit = service.Execute(request) as RetrieveRecordChangeHistoryResponse;
+
+            var auditValue = audit.AuditDetailCollection.AuditDetails.Select(d =>
+            {
+                var detail = d as AttributeAuditDetail;
+
+                if (detail == null)
+                {
+                    return null;
+                }
+
+                var oldValue = detail.OldValue.GetAttributeValue<object>(field);
+                
+                return Tuple.Create(PropertyStringifier.Stringify(field, detail.OldValue, service, config), oldValue);
+            })
+            .FirstOrDefault(t => t != null);
+            
+            return new ValueExpression(auditValue?.Item1 ?? string.Empty, auditValue?.Item2);
+        };
+
+        public static FunctionHandler GetRecordId = (primary, service, tracing, organizationConfig, parameters) =>
+        {
+            var firstParam = parameters.FirstOrDefault()?.Value;
+            var reference = (firstParam as Entity)?.ToEntityReference() ?? firstParam as EntityReference;
+            var config = GetConfig(parameters);
+
+            if (firstParam != null && reference == null)
+            {
+                throw new InvalidPluginExecutionException("RecordId: First Parameter must be an Entity or EntityReference");
+            }
+
+            if (reference == null)
+            {
+                return new ValueExpression(string.Empty, null);
+            }
+
+            var textValue = reference.Id.ToString(config.GetValue<string>("format", "format must be a string", "D"));
+
+            return new ValueExpression(textValue, reference.Id);
+        };
+
+        public static FunctionHandler GetRecordLogicalName = (primary, service, tracing, organizationConfig, parameters) =>
+        {
+            var firstParam = parameters.FirstOrDefault()?.Value;
+            var reference = (firstParam as Entity)?.ToEntityReference() ?? firstParam as EntityReference;
+
+            if (firstParam != null && reference == null)
+            {
+                throw new InvalidPluginExecutionException("RecordLogicalName: First Parameter must be an Entity or EntityReference");
+            }
+
+            if (reference == null)
+            {
+                return new ValueExpression(string.Empty, null);
+            }
+
+            return new ValueExpression(reference.LogicalName, reference.LogicalName);
+        };
     }
 }
+#pragma warning restore S1104 // Fields should not have public accessibility
