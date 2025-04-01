@@ -117,7 +117,10 @@ namespace Xrm.Oss.XTL.Templating
                     return;
                 }
 
-                var output = TokenMatcher.ProcessTokens(templateText, dataSource, new OrganizationConfig { OrganizationUrl = config.OrganizationUrl }, service, tracing);
+                var organizationConfig = _organizationConfig ?? new OrganizationConfig();
+                organizationConfig.OrganizationUrl = config.OrganizationUrl;
+
+                var output = TokenMatcher.ProcessTokens(templateText, dataSource, organizationConfig, service, tracing);
 
                 var result = new ProcessingResult
                 {
@@ -223,9 +226,6 @@ namespace Xrm.Oss.XTL.Templating
                 throw new InvalidDataException("You must either pass a template text or define a template field");
             }
 
-
-            // Templates inside e-mails will be HTML encoded
-            templateText = WebUtility.HtmlDecode(templateText);
             return templateText;
         }
 

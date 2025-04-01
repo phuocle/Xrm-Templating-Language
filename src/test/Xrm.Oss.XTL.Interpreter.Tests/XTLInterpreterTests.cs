@@ -423,6 +423,52 @@ namespace Xrm.Oss.XTL.Interpreter.Tests
         }
 
         [Test]
+        public void It_Should_Execute_Lambdas_On_Filter()
+        {
+            var context = new XrmFakedContext();
+            var service = context.GetFakedOrganizationService();
+            var tracing = context.GetFakeTracingService();
+
+            var email = new Entity
+            {
+                LogicalName = "email",
+                Id = Guid.NewGuid(),
+                Attributes = new AttributeCollection
+                {
+                    { "subject", "TestSubject" }
+                }
+            };
+
+            var formula = "Join(\" \", Filter([\"Lord\", \"of\", \"the\", \"Rings\"], (e) => Not(IsEqual(IndexOf(e, \"o\"), -1))))";
+            var result = new XTLInterpreter(formula, email, null, service, tracing).Produce();
+
+            Assert.That(result, Is.EqualTo("Lord of"));
+        }
+
+        [Test]
+        public void Coalesce_Should_Return_First_Non_Null_Value()
+        {
+            var context = new XrmFakedContext();
+            var service = context.GetFakedOrganizationService();
+            var tracing = context.GetFakeTracingService();
+
+            var email = new Entity
+            {
+                LogicalName = "email",
+                Id = Guid.NewGuid(),
+                Attributes = new AttributeCollection
+                {
+                    { "subject", "TestSubject" }
+                }
+            };
+
+            var formula = "Coalesce(Value(\"subject2\"), Value(\"subject\"))";
+            var result = new XTLInterpreter(formula, email, null, service, tracing).Produce();
+
+            Assert.That(result, Is.EqualTo("TestSubject"));
+        }
+
+        [Test]
         public void It_Should_Sort_Native_Value_Array()
         {
             var context = new XrmFakedContext();
@@ -880,6 +926,26 @@ namespace Xrm.Oss.XTL.Interpreter.Tests
             Assert.That(() => result = new XTLInterpreter("Array(\"This\", null, \"is\", \"a\", \"test\")", email, null, service, tracing).Produce(), Throws.Nothing);
             Assert.That(result, Is.EqualTo("This, , is, a, test"));
         }
+        
+        [Test]
+        public void It_Should_Not_Fail_If_No_Primary_Entity_Available_In_Fetch()
+        {
+            var context = new XrmFakedContext();
+            var service = context.GetFakedOrganizationService();
+            var tracing = context.GetFakeTracingService();
+
+            var task = new Entity
+            {
+                LogicalName = "task",
+                Id = Guid.NewGuid()
+            };
+
+            context.Initialize(task);
+            
+            var formula = "Fetch(\"<fetch no-lock='true'><entity name='task'><attribute name='description' /><attribute name='subject' /></entity></fetch>\")";
+
+            Assert.That(() => new XTLInterpreter(formula, null, null, service, tracing).Produce(), Throws.Nothing);
+        }
 
         [Test]
         public void It_Should_Allow_To_Use_Concat_In_Fetch()
@@ -987,6 +1053,34 @@ namespace Xrm.Oss.XTL.Interpreter.Tests
             var result = new XTLInterpreter(formula, null, null, service, tracing).Produce();
 
             Assert.That(result, Is.EqualTo("retrieveLabels: True, returnOptionSetValue: False"));
+        }
+
+        [Test]
+        public void It_Should_Count_Length_Of_Arrays()
+        {
+            var context = new XrmFakedContext();
+            var service = context.GetFakedOrganizationService();
+            var tracing = context.GetFakeTracingService();
+
+            var formula = "Length( [ \"A\", \"B\", \"C\" ] )";
+
+            var result = new XTLInterpreter(formula, null, null, service, tracing).Produce();
+
+            Assert.That(result, Is.EqualTo("3"));
+        }
+
+        [Test]
+        public void It_Should_Count_Length_Of_String()
+        {
+            var context = new XrmFakedContext();
+            var service = context.GetFakedOrganizationService();
+            var tracing = context.GetFakeTracingService();
+
+            var formula = "Length( \"ABC\" )";
+
+            var result = new XTLInterpreter(formula, null, null, service, tracing).Produce();
+
+            Assert.That(result, Is.EqualTo("3"));
         }
 
         [Test]

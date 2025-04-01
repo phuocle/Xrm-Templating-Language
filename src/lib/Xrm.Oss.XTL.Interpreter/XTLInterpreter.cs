@@ -26,14 +26,18 @@ namespace Xrm.Oss.XTL.Interpreter
         {
             { "And", FunctionHandlers.And },
             { "Array", FunctionHandlers.Array },
+            { "Case", FunctionHandlers.Case },
+            { "Coalesce", FunctionHandlers.Coalesce },
             { "Concat", FunctionHandlers.Concat },
             { "ConvertDateTime", FunctionHandlers.ConvertDateTime },
             { "DateTimeNow", FunctionHandlers.DateTimeNow },
             { "DateTimeUtcNow", FunctionHandlers.DateTimeUtcNow },
             { "DateToString", FunctionHandlers.DateToString },
             { "Fetch", FunctionHandlers.Fetch },
+            { "Filter", FunctionHandlers.Filter },
             { "First", FunctionHandlers.First },
             { "Format", FunctionHandlers.Format },
+            { "GptPrompt", FunctionHandlers.GptPrompt },
             { "If", FunctionHandlers.If },
             { "IndexOf", FunctionHandlers.IndexOf },
             { "IsEqual", FunctionHandlers.IsEqual },
@@ -44,6 +48,7 @@ namespace Xrm.Oss.XTL.Interpreter
             { "IsNull", FunctionHandlers.IsNull },
             { "Join", FunctionHandlers.Join },
             { "Last", FunctionHandlers.Last},
+            { "Length", FunctionHandlers.Length },
             { "Map", FunctionHandlers.Map },
             { "NewLine", FunctionHandlers.NewLine },
             { "Not", FunctionHandlers.Not },
@@ -437,7 +442,7 @@ namespace Xrm.Oss.XTL.Interpreter
 
             var output = Formula(new Dictionary<string, ValueExpression> { });
 
-            return output?.Text;
+            return output?.Text ?? string.Empty;
         }
     }
 }

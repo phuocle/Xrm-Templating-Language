@@ -24,6 +24,8 @@ A domain specific language for Dynamics CRM allowing for easy text template proc
     - [And](#and)
     - [Not](#not)
     - [IsNull](#isnull)
+    - [Coalesce](#coalesce)
+    - [Case](#case)
     - [IsEqual](#isequal)
     - [IsLess](#isless)
     - [IsLessEqual](#islessequal)
@@ -36,6 +38,7 @@ A domain specific language for Dynamics CRM allowing for easy text template proc
     - [Last](#last)
     - [Union](#union)
     - [Map](#map)
+    - [Filter](#filter)
     - [Sort](#sort)
     - [RecordTable](#recordtable)
     - [PrimaryRecord](#primaryrecord)
@@ -46,6 +49,7 @@ A domain specific language for Dynamics CRM allowing for easy text template proc
     - [Substring](#substring)
     - [Replace](#replace)
     - [Array](#array)
+    - [Length](#length)
     - [Join](#join)
     - [NewLine](#newline)
     - [DateTimeNow](#datetimenow)
@@ -62,6 +66,7 @@ A domain specific language for Dynamics CRM allowing for easy text template proc
   - [Sample](#sample)
   - [Templating on not yet existing records](#templating-on-not-yet-existing-records)
   - [Template Editor](#template-editor)
+  - [Syntax Definition](#syntax-definition)
   - [License](#license)
   - [Credits](#credits)
 
@@ -196,6 +201,39 @@ Example:
 ``` JavaScript
 IsNull( Value ("parentaccountid") )  
 ```
+
+### Coalesce
+**Available since: v3.9.6**
+
+Uses the first non-null value of all parameters passed.
+
+Example:
+``` JavaScript
+Coalesce ( Value ( "parentaccountid" ), Value ( "parentcontactid" ), "None" )
+```
+
+If parentaccountid is not null, it will be used.
+Otherwise, if parentcontactid is not null, it will be used.
+If none of these two are not null, the static "None" will be used.
+
+### Case
+**Available since: v3.9.6**
+
+Checks a list of conditions followed by their values and uses the first true condition's value as result.
+If none matches, the last value is used as default result.
+
+Because of this, the list of parameters has to be odd ( 2 * n + 1, where n is the number of conditions, where each condition has one check followed by one result plus the last value as default).
+
+Example:
+``` JavaScript
+Case ( IsLess ( Value ("creditlimit"), 1000 ), "Low", IsLess ( Value ("creditlimit"), 50000 ), "Medium", IsLess ( Value ("credilimit"), 100000 ), "High", "None" )
+```
+
+In above example, if credit limit is below 1000, it will return "Low".
+Otherwise, if it is less than 50.000, it will return "Medium".
+Otherwise, if it is less than 100.000, it will return "High".
+
+If none matches, for example if creditlimit is null, it will return "None".
 
 ### IsEqual
 Checks if two parameters are equal. If yes, true is returned, otherwise false.
@@ -365,6 +403,26 @@ Join(", ", Map(Fetch("<fetch no-lock='true'><entity name='contact'><attribute na
 ```
 
 will result in something like this: `"2018-10-27 05:39, 2019-04-24 10:24"`
+  
+### Filter
+**Available since: v3.9.6**
+Filters values inside an array by checking every value using the provided function.
+If the provided function returns true, the value will be kept, otherwise it will be filtered out.
+
+Example:
+``` JavaScript
+Join(" ", Filter(["Lord", "of", "the", "Rings"], (e) => Not(IsEqual(IndexOf(e, "o"), -1))))
+```
+
+will filter out all words that don't contain the character 'o', resulting in "Lord of".
+
+Your input does not need to be an array of strings, you can even loop over records fetched using Fetch:
+
+``` JavaScript
+Join(", ", Map(Filter(Fetch("<fetch no-lock='true'><entity name='contact'><attribute name='ownerid' /><attribute name='createdon' /></entity></fetch>"), (recordInFilter) => Not(IsNull(Value("createdon", { explicitTarget: recordInFilter })))), (record) => DateToString(ConvertDateTime(Value("createdon", { explicitTarget: record }), { userId: Value("ownerid", { explicitTarget: record }) }), { format: "yyyy-MM-dd hh:mm" })))
+```
+
+will result in something like this: `"2018-10-27 05:39, 2019-04-24 10:24"`, where `createdon` is not null.
 
 ### Sort
 Sort array, either native values or by property. Ascending by default, descending by setting the config flag
@@ -520,6 +578,21 @@ Array("those", "are", "test", "parameters")
 ```
 Info: Arrays have a default textual representation, which is all of the array value text representations delimited by ", ". Above examples textual representation would therefore be "those, are, test, parameters". Null values are not removed, but show up as empty string.
 
+### Length
+Gets the length of an array or a string that is passed as first parameter.
+
+Example:
+``` JavaScript
+Length( [ "A", "B", "C" ] )
+```
+  
+or 
+``` JavaScript
+Length( "ABC" )
+```
+  
+Both executions will return 3.
+  
 ### Join
 Joins multiple strings together using the separator that you passed. You can pass dynamic expressions whose text representations will be used. The first parameter is the separator, the second one is the array of values to concatenate.
 You can pass a boolean as third parameter, stating whether empty parameters should be left out when concatenating (defaults to false).
@@ -799,6 +872,76 @@ In case any questions are left, please give ${{Value("regardingobjectid.createdb
 
 This E-Mail was automatically generated by the system.
 ```
+
+## Syntax definition
+The language syntax is defined by the following BNF (Backus-Naur form):
+
+```
+<formula> ::= <number> | <string> | <boolean> | <object> | <list> | <null> | <lambda_function> | <function_call>
+
+<expression> ::= <formula> | <identifier> 
+
+<number> ::= <sign>? (<integer> | <floating_point>)
+
+<sign> ::= "-"
+
+<integer> ::= <digit> | <digit> <integer>
+
+<floating_point> ::= <integer> "." <integer> <float_suffix> | <integer> <float_suffix>
+
+<float_suffix> ::= "d" | "m"
+
+<string> ::= "\"" <double_quote_character>* "\"" | "'" <single_quote_character>* "'"
+
+<single_quote_character> ::= <character> | <double_quote> | <escaped_single_quote>
+
+<double_quote_character> ::=  <character> | <single_quote> | <escaped_double_quote>
+
+<single_quote> ::= "'"
+
+<double_quote> ::= "\""
+
+<escaped_single_quote> ::= <escape_character> <single_quote>
+
+<escaped_double_quote> ::= <escape_character> <double_quote>
+
+<escape_character> ::= "\\"
+
+<boolean> ::= "true" | "false"
+
+<object> ::= "{" <whitespace>* <key_value_pairs>? <whitespace>* "}"
+
+<key_value_pairs> ::= <key_value_pair> | <key_value_pair> <whitespace>* "," <whitespace>* <key_value_pairs>
+
+<key_value_pair> ::= <letter> <character>* <whitespace>* ":" <whitespace>* <expression>
+
+<list> ::= "[" <whitespace>* <list_elements>? <whitespace>* "]"
+
+<list_elements> ::= <expression> | <expression> <whitespace>* "," <whitespace>* <list_elements>
+
+<null> ::= "null"
+
+<function_call> ::= <whitespace>* <function_name> <whitespace>* "(" <whitespace>* <arguments>? <whitespace>* ")" <whitespace>*
+
+<function_name> ::= <identifier>
+
+<arguments> ::= <expression> | <expression> <whitespace>* "," <whitespace>* <arguments>
+
+<lambda_function> ::= <whitespace>* "(" <whitespace>* <parameter> <whitespace>* ")" <whitespace>* "=>" <whitespace>* <expression> <whitespace>*
+
+<parameter> ::= <identifier>
+
+<identifier> ::= <letter> | <letter> <identifier> | <letter> <digit> <identifier>*
+
+<digit> ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+
+<letter> ::= "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z"
+
+<character> ::= <letter> | <digit> | " " | "!" | "#" | "$" | "%" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "]" | "^" | "_" | "`" | "{" | "|" | "}" | "~"
+
+<whitespace> ::= " " <whitespace>* | "\t" <whitespace>* | "\n" <whitespace>*
+```
+You can also validate your calls on this website: https://mdkrajnak.github.io/ebnftest/ 
 
 ## License
 Licensed using the MIT license, enjoy!
